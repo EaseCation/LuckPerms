@@ -28,6 +28,16 @@ package me.lucko.luckperms.nukkit.inject.server;
 import com.google.common.collect.ForwardingMap;
 import com.google.common.collect.ImmutableMap;
 
+import it.unimi.dsi.fastutil.booleans.*;
+import it.unimi.dsi.fastutil.bytes.*;
+import it.unimi.dsi.fastutil.chars.*;
+import it.unimi.dsi.fastutil.doubles.*;
+import it.unimi.dsi.fastutil.floats.*;
+import it.unimi.dsi.fastutil.ints.*;
+import it.unimi.dsi.fastutil.longs.*;
+import it.unimi.dsi.fastutil.objects.*;
+import it.unimi.dsi.fastutil.shorts.*;
+
 import me.lucko.luckperms.common.cache.LoadingMap;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.treeview.PermissionRegistry;
@@ -45,7 +55,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * A replacement map for the 'permissions' instance in Nukkit's SimplePluginManager.
@@ -206,7 +219,7 @@ public final class LuckPermsPermissionMap extends ForwardingMap<String, Permissi
 
         try {
             //noinspection unchecked
-            Map<String, Boolean> children = (Map<String, Boolean>) PERMISSION_CHILDREN_FIELD.get(permission);
+            Object2BooleanMap<String> children = (Object2BooleanMap<String>) PERMISSION_CHILDREN_FIELD.get(permission);
             while (children instanceof NotifyingChildrenMap) {
                 children = ((NotifyingChildrenMap) children).delegate;
             }
@@ -226,7 +239,7 @@ public final class LuckPermsPermissionMap extends ForwardingMap<String, Permissi
 
         try {
             //noinspection unchecked
-            Map<String, Boolean> children = (Map<String, Boolean>) PERMISSION_CHILDREN_FIELD.get(permission);
+            Object2BooleanMap<String> children = (Object2BooleanMap<String>) PERMISSION_CHILDREN_FIELD.get(permission);
             while (children instanceof NotifyingChildrenMap) {
                 children = ((NotifyingChildrenMap) children).delegate;
             }
@@ -237,10 +250,10 @@ public final class LuckPermsPermissionMap extends ForwardingMap<String, Permissi
         return permission;
     }
 
-    private final class NotifyingChildrenMap extends ForwardingMap<String, Boolean> {
-        private final Map<String, Boolean> delegate;
+    private final class NotifyingChildrenMap implements Object2BooleanMap<String> {
+        private final Object2BooleanMap<String> delegate;
 
-        NotifyingChildrenMap(Map<String, Boolean> delegate) {
+        NotifyingChildrenMap(Object2BooleanMap<String> delegate) {
             this.delegate = delegate;
 
             for (String key : this.delegate.keySet()) {
@@ -249,13 +262,16 @@ public final class LuckPermsPermissionMap extends ForwardingMap<String, Permissi
         }
 
         @Override
-        protected Map<String, Boolean> delegate() {
-            return this.delegate;
+        public Boolean put(@NonNull String key, @NonNull Boolean value) {
+            Boolean ret = delegate.put(key, value);
+            LuckPermsPermissionMap.this.plugin.getPermissionRegistry().insert(key);
+            LuckPermsPermissionMap.this.update();
+            return ret;
         }
 
         @Override
-        public Boolean put(@NonNull String key, @NonNull Boolean value) {
-            Boolean ret = super.put(key, value);
+        public boolean put(String key, boolean value) {
+            boolean ret = delegate.put(key, value);
             LuckPermsPermissionMap.this.plugin.getPermissionRegistry().insert(key);
             LuckPermsPermissionMap.this.update();
             return ret;
@@ -263,7 +279,7 @@ public final class LuckPermsPermissionMap extends ForwardingMap<String, Permissi
 
         @Override
         public void putAll(@NonNull Map<? extends String, ? extends Boolean> map) {
-            super.putAll(map);
+            delegate.putAll(map);
             for (String key : map.keySet()) {
                 LuckPermsPermissionMap.this.plugin.getPermissionRegistry().insert(key);
             }
@@ -272,15 +288,329 @@ public final class LuckPermsPermissionMap extends ForwardingMap<String, Permissi
 
         @Override
         public Boolean remove(@NonNull Object object) {
-            Boolean ret = super.remove(object);
+            Boolean ret = delegate.remove(object);
+            LuckPermsPermissionMap.this.update();
+            return ret;
+        }
+
+        @Override
+        public boolean removeBoolean(Object key) {
+            boolean ret = delegate.removeBoolean(key);
             LuckPermsPermissionMap.this.update();
             return ret;
         }
 
         @Override
         public void clear() {
-            super.clear();
+            delegate.clear();
             LuckPermsPermissionMap.this.update();
+        }
+
+        // forwarding
+
+        @Override
+        public boolean test(String operand) {
+            return delegate.test(operand);
+        }
+
+        @Override
+        public Predicate<String> and(Predicate<? super String> other) {
+            return delegate.and(other);
+        }
+
+        @Override
+        public Predicate<String> negate() {
+            return delegate.negate();
+        }
+
+        @Override
+        public Predicate<String> or(Predicate<? super String> other) {
+            return delegate.or(other);
+        }
+
+        @Override
+        public boolean getBoolean(Object key) {
+            return delegate.getBoolean(key);
+        }
+
+        @Override
+        public Boolean apply(String key) {
+            return delegate.apply(key);
+        }
+
+        @Override
+        public <V> Function<V, Boolean> compose(Function<? super V, ? extends String> before) {
+            return delegate.compose(before);
+        }
+
+        @Override
+        public Boolean get(Object key) {
+            return delegate.get(key);
+        }
+
+        @Override
+        public ObjectSet<String> keySet() {
+            return delegate.keySet();
+        }
+
+        @Override
+        public BooleanCollection values() {
+            return delegate.values();
+        }
+
+        @Override
+        public boolean containsKey(Object key) {
+            return delegate.containsKey(key);
+        }
+
+        @Override
+        public boolean containsValue(boolean value) {
+            return delegate.containsValue(value);
+        }
+
+        @Override
+        public boolean containsValue(Object value) {
+            return delegate.containsValue(value);
+        }
+
+        @Override
+        public void forEach(BiConsumer<? super String, ? super Boolean> consumer) {
+            delegate.forEach(consumer);
+        }
+
+        @Override
+        public void replaceAll(BiFunction<? super String, ? super Boolean, ? extends Boolean> function) {
+            delegate.replaceAll(function);
+        }
+
+        @Override
+        public Boolean putIfAbsent(String key, Boolean value) {
+            return delegate.putIfAbsent(key, value);
+        }
+
+        @Override
+        public boolean remove(Object key, Object value) {
+            return delegate.remove(key, value);
+        }
+
+        @Override
+        public boolean replace(String key, Boolean oldValue, Boolean newValue) {
+            return delegate.replace(key, oldValue, newValue);
+        }
+
+        @Override
+        public Boolean replace(String key, Boolean value) {
+            return delegate.replace(key, value);
+        }
+
+        @Override
+        public Boolean computeIfAbsent(String key, Function<? super String, ? extends Boolean> mappingFunction) {
+            return delegate.computeIfAbsent(key, mappingFunction);
+        }
+
+        @Override
+        public Boolean computeIfPresent(String key, BiFunction<? super String, ? super Boolean, ? extends Boolean> remappingFunction) {
+            return delegate.computeIfPresent(key, remappingFunction);
+        }
+
+        @Override
+        public Boolean compute(String key, BiFunction<? super String, ? super Boolean, ? extends Boolean> remappingFunction) {
+            return delegate.compute(key, remappingFunction);
+        }
+
+        @Override
+        public Boolean merge(String key, Boolean value, BiFunction<? super Boolean, ? super Boolean, ? extends Boolean> remappingFunction) {
+            return delegate.merge(key, value, remappingFunction);
+        }
+
+        @Override
+        public boolean getOrDefault(Object key, boolean defaultValue) {
+            return delegate.getOrDefault(key, defaultValue);
+        }
+
+        @Override
+        public Boolean getOrDefault(Object key, Boolean defaultValue) {
+            return delegate.getOrDefault(key, defaultValue);
+        }
+
+        @Override
+        public boolean putIfAbsent(String key, boolean value) {
+            return delegate.putIfAbsent(key, value);
+        }
+
+        @Override
+        public boolean remove(Object key, boolean value) {
+            return delegate.remove(key, value);
+        }
+
+        @Override
+        public boolean replace(String key, boolean oldValue, boolean newValue) {
+            return delegate.replace(key, oldValue, newValue);
+        }
+
+        @Override
+        public boolean replace(String key, boolean value) {
+            return delegate.replace(key, value);
+        }
+
+        @Override
+        public boolean computeIfAbsent(String key, Predicate<? super String> mappingFunction) {
+            return delegate.computeIfAbsent(key, mappingFunction);
+        }
+
+        @Override
+        public boolean computeBooleanIfAbsent(String key, Predicate<? super String> mappingFunction) {
+            return delegate.computeBooleanIfAbsent(key, mappingFunction);
+        }
+
+        @Override
+        public boolean computeIfAbsent(String key, Object2BooleanFunction<? super String> mappingFunction) {
+            return delegate.computeIfAbsent(key, mappingFunction);
+        }
+
+        @Override
+        public boolean computeBooleanIfAbsentPartial(String key, Object2BooleanFunction<? super String> mappingFunction) {
+            return delegate.computeBooleanIfAbsentPartial(key, mappingFunction);
+        }
+
+        @Override
+        public boolean computeBooleanIfPresent(String key, BiFunction<? super String, ? super Boolean, ? extends Boolean> remappingFunction) {
+            return delegate.computeBooleanIfPresent(key, remappingFunction);
+        }
+
+        @Override
+        public boolean computeBoolean(String key, BiFunction<? super String, ? super Boolean, ? extends Boolean> remappingFunction) {
+            return delegate.computeBoolean(key, remappingFunction);
+        }
+
+        @Override
+        public boolean merge(String key, boolean value, BiFunction<? super Boolean, ? super Boolean, ? extends Boolean> remappingFunction) {
+            return delegate.merge(key, value, remappingFunction);
+        }
+
+        @Override
+        public int size() {
+            return delegate.size();
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return delegate.isEmpty();
+        }
+
+        @Override
+        public void defaultReturnValue(boolean rv) {
+            delegate.defaultReturnValue(rv);
+        }
+
+        @Override
+        public boolean defaultReturnValue() {
+            return delegate.defaultReturnValue();
+        }
+
+        @Override
+        public <T> Function<String, T> andThen(Function<? super Boolean, ? extends T> after) {
+            return delegate.andThen(after);
+        }
+
+        @Override
+        public Object2ByteFunction<String> andThenByte(Boolean2ByteFunction after) {
+            return delegate.andThenByte(after);
+        }
+
+        @Override
+        public Byte2BooleanFunction composeByte(Byte2ObjectFunction<String> before) {
+            return delegate.composeByte(before);
+        }
+
+        @Override
+        public Object2ShortFunction<String> andThenShort(Boolean2ShortFunction after) {
+            return delegate.andThenShort(after);
+        }
+
+        @Override
+        public Short2BooleanFunction composeShort(Short2ObjectFunction<String> before) {
+            return delegate.composeShort(before);
+        }
+
+        @Override
+        public Object2IntFunction<String> andThenInt(Boolean2IntFunction after) {
+            return delegate.andThenInt(after);
+        }
+
+        @Override
+        public Int2BooleanFunction composeInt(Int2ObjectFunction<String> before) {
+            return delegate.composeInt(before);
+        }
+
+        @Override
+        public Object2LongFunction<String> andThenLong(Boolean2LongFunction after) {
+            return delegate.andThenLong(after);
+        }
+
+        @Override
+        public Long2BooleanFunction composeLong(Long2ObjectFunction<String> before) {
+            return delegate.composeLong(before);
+        }
+
+        @Override
+        public Object2CharFunction<String> andThenChar(Boolean2CharFunction after) {
+            return delegate.andThenChar(after);
+        }
+
+        @Override
+        public Char2BooleanFunction composeChar(Char2ObjectFunction<String> before) {
+            return delegate.composeChar(before);
+        }
+
+        @Override
+        public Object2FloatFunction<String> andThenFloat(Boolean2FloatFunction after) {
+            return delegate.andThenFloat(after);
+        }
+
+        @Override
+        public Float2BooleanFunction composeFloat(Float2ObjectFunction<String> before) {
+            return delegate.composeFloat(before);
+        }
+
+        @Override
+        public Object2DoubleFunction<String> andThenDouble(Boolean2DoubleFunction after) {
+            return delegate.andThenDouble(after);
+        }
+
+        @Override
+        public Double2BooleanFunction composeDouble(Double2ObjectFunction<String> before) {
+            return delegate.composeDouble(before);
+        }
+
+        @Override
+        public <T> Object2ObjectFunction<String, T> andThenObject(Boolean2ObjectFunction<? extends T> after) {
+            return delegate.andThenObject(after);
+        }
+
+        @Override
+        public <T> Object2BooleanFunction<T> composeObject(Object2ObjectFunction<? super T, ? extends String> before) {
+            return delegate.composeObject(before);
+        }
+
+        @Override
+        public <T> Object2ReferenceFunction<String, T> andThenReference(Boolean2ReferenceFunction<? extends T> after) {
+            return delegate.andThenReference(after);
+        }
+
+        @Override
+        public <T> Reference2BooleanFunction<T> composeReference(Reference2ObjectFunction<? super T, ? extends String> before) {
+            return delegate.composeReference(before);
+        }
+
+        @Override
+        public ObjectSet<Entry<String>> object2BooleanEntrySet() {
+            return delegate.object2BooleanEntrySet();
+        }
+
+        @Override
+        public ObjectSet<Map.Entry<String, Boolean>> entrySet() {
+            return delegate.entrySet();
         }
     }
 

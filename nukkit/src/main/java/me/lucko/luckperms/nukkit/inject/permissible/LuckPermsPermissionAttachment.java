@@ -27,6 +27,9 @@ package me.lucko.luckperms.nukkit.inject.permissible;
 
 import com.google.common.base.Preconditions;
 
+import it.unimi.dsi.fastutil.booleans.*;
+import it.unimi.dsi.fastutil.objects.*;
+
 import me.lucko.luckperms.common.config.ConfigKeys;
 import me.lucko.luckperms.common.model.User;
 import me.lucko.luckperms.common.node.factory.NodeBuilders;
@@ -43,14 +46,10 @@ import cn.nukkit.permission.PermissionRemovedExecutor;
 import cn.nukkit.plugin.Plugin;
 
 import java.lang.reflect.Field;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * PermissionAttachment for LuckPerms.
@@ -89,7 +88,7 @@ public class LuckPermsPermissionAttachment extends PermissionAttachment {
     /**
      * The permissions being applied by this attachment
      */
-    private final Map<String, Boolean> perms = Collections.synchronizedMap(new HashMap<>());
+    private final Object2BooleanMap<String> perms = Object2BooleanMaps.synchronize(new Object2BooleanOpenHashMap<>());
 
     /**
      * If the attachment has been applied to the user
@@ -241,8 +240,9 @@ public class LuckPermsPermissionAttachment extends PermissionAttachment {
 
         String permission = name.toLowerCase(Locale.ROOT);
 
-        Boolean previous = this.perms.put(permission, value);
-        if (previous != null && previous == value) {
+        boolean contains = this.perms.containsKey(permission);
+        boolean previous = this.perms.put(permission, value);
+        if (contains && previous == value) {
             return;
         }
 
@@ -252,7 +252,7 @@ public class LuckPermsPermissionAttachment extends PermissionAttachment {
             return;
         }
 
-        if (previous != null) {
+        if (contains) {
             unsetPermissionInternal(permission);
         }
 
@@ -311,7 +311,7 @@ public class LuckPermsPermissionAttachment extends PermissionAttachment {
     }
 
     @Override
-    public Map<String, Boolean> getPermissions() {
+    public Object2BooleanMap<String> getPermissions() {
         return this.perms;
     }
 
@@ -340,12 +340,24 @@ public class LuckPermsPermissionAttachment extends PermissionAttachment {
      * An instance of this map is injected into the super instance so these plugins continue
      * to work with LuckPerms.
      */
-    private final class FakeBackingMap implements Map<String, Boolean> {
+    private final class FakeBackingMap implements Object2BooleanMap<String> {
 
         @Override
         public Boolean put(String key, Boolean value) {
             // grab the previous result, so we can still satisfy the method signature of Map
             Boolean previous = LuckPermsPermissionAttachment.this.perms.get(key);
+
+            // proxy the call back through the PermissionAttachment instance
+            setPermission(key, value);
+
+            // return the previous value
+            return previous;
+        }
+
+        @Override
+        public boolean put(String key, boolean value) {
+            // grab the previous result, so we can still satisfy the method signature of Map
+            boolean previous = LuckPermsPermissionAttachment.this.perms.getBoolean(key);
 
             // proxy the call back through the PermissionAttachment instance
             setPermission(key, value);
@@ -365,6 +377,25 @@ public class LuckPermsPermissionAttachment extends PermissionAttachment {
 
             // grab the previous result, so we can still satisfy the method signature of Map
             Boolean previous = LuckPermsPermissionAttachment.this.perms.get(permission);
+
+            // proxy the call back through the PermissionAttachment instance
+            unsetPermission(permission, true);
+
+            // return the previous value
+            return previous;
+        }
+
+        @Override
+        public boolean removeBoolean(Object key) {
+            // we only accept string keys
+            if (!(key instanceof String)) {
+                return false;
+            }
+
+            String permission = (String) key;
+
+            // grab the previous result, so we can still satisfy the method signature of Map
+            boolean previous = LuckPermsPermissionAttachment.this.perms.getBoolean(permission);
 
             // proxy the call back through the PermissionAttachment instance
             unsetPermission(permission, true);
@@ -411,7 +442,7 @@ public class LuckPermsPermissionAttachment extends PermissionAttachment {
         }
 
         @Override
-        public boolean containsValue(Object value) {
+        public boolean containsValue(boolean value) {
             // just proxy
             return LuckPermsPermissionAttachment.this.perms.containsValue(value);
         }
@@ -423,21 +454,39 @@ public class LuckPermsPermissionAttachment extends PermissionAttachment {
         }
 
         @Override
-        public Set<String> keySet() {
+        public boolean getBoolean(Object key) {
             // just proxy
-            return Collections.unmodifiableSet(LuckPermsPermissionAttachment.this.perms.keySet());
+            return LuckPermsPermissionAttachment.this.perms.getBoolean(key);
         }
 
         @Override
-        public Collection<Boolean> values() {
+        public ObjectSet<String> keySet() {
             // just proxy
-            return Collections.unmodifiableCollection(LuckPermsPermissionAttachment.this.perms.values());
+            return ObjectSets.unmodifiable(LuckPermsPermissionAttachment.this.perms.keySet());
         }
 
         @Override
-        public Set<Entry<String, Boolean>> entrySet() {
+        public BooleanCollection values() {
             // just proxy
-            return Collections.unmodifiableSet(LuckPermsPermissionAttachment.this.perms.entrySet());
+            return BooleanCollections.unmodifiable(LuckPermsPermissionAttachment.this.perms.values());
+        }
+
+        @Override
+        public ObjectSet<Entry<String>> object2BooleanEntrySet() {
+            // just proxy
+            return ObjectSets.unmodifiable(LuckPermsPermissionAttachment.this.perms.object2BooleanEntrySet());
+        }
+
+        @Override
+        public void defaultReturnValue(boolean rv) {
+            // just proxy
+            LuckPermsPermissionAttachment.this.perms.defaultReturnValue(rv);
+        }
+
+        @Override
+        public boolean defaultReturnValue() {
+            // just proxy
+            return LuckPermsPermissionAttachment.this.perms.defaultReturnValue();
         }
 
         @Override
