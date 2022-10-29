@@ -75,7 +75,7 @@ public class NukkitPlayerCalculator implements ContextCalculator<Player>, Listen
 
         Level level = subject.getLevel();
         if (this.dimensionType) {
-            consumer.accept(DefaultContextKeys.DIMENSION_TYPE_KEY, getDimensionName(level.getDimension()));
+            consumer.accept(DefaultContextKeys.DIMENSION_TYPE_KEY, getDimensionName(level.getDimension().ordinal()));
         }
         if (this.world) {
             this.plugin.getConfiguration().get(ConfigKeys.WORLD_REWRITES).rewriteAndSubmit(level.getName(), consumer);
